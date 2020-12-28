@@ -1,0 +1,113 @@
+import csv
+from getpass import getpass
+from time import sleep
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException
+from msedge.selenium_tools import Edge, EdgeOptions
+from selenium import webdriver
+
+def getTweetData(card):
+    username = card.find_element_by_xpath('.//span').text
+    handle = card.find_element_by_xpath('.//span[contains(text(), "@")]').text
+    try:
+        postdate = card.find_element_by_xpath('.//time').get_attribute('datetime')
+    except NoSuchElementException:
+        return
+    
+    comment = card.find_element_by_xpath('.//div[2]/div[2]/div[1]').text
+    responding = card.find_element_by_xpath('.//div[2]/div[2]/div[2]').text
+    text = comment + responding
+    replyCount = card.find_element_by_xpath('.//div[@data-testid="reply"]').text
+    retweetCount = card.find_element_by_xpath('.//div[@data-testid="retweet"]').text
+    likeCount = card.find_element_by_xpath('.//div[@data-testid="like"]').text
+
+    tweet = (username, handle, postdate, text, replyCount, retweetCount, likeCount)
+    return tweet
+
+#create instance of web driver - edge chromium
+options = EdgeOptions()
+options.use_chromium = True
+driver = Edge(options=options)
+
+#-------------------------------------------------------------------------#
+#create instance of web driver - chrome - line 1-3 chrome with incognito
+#chrome_options = webdriver.ChromeOptions()
+#chrome_options.add_argument("--incognito")
+#driver = webdriver.Chrome(chrome_options=chrome_options)
+
+#create instance of web driver - chrome - chrome without incognito
+#driver = Chrome()
+#-------------------------------------------------------------------------#
+
+#navigate to Twitter login screen
+driver.get('http://www.twitter.com/login')
+driver.maximize_window()
+
+#-------------------------------------------------------------------------#
+#information for xpath:
+# / = selects from root of page
+# // = starts in current page and matches anywhere
+#-------------------------------------------------------------------------#
+
+#login
+username = driver.find_element_by_xpath('//input[@name="session[username_or_email]"]')
+username.send_keys('***')
+
+#password
+password = driver.find_element_by_xpath('//input[@name="session[password]"]')
+password.send_keys('***')
+#Keys.Return == click on 'log in'
+password.send_keys(Keys.RETURN)
+
+# find search input and search for term
+searchInput = driver.find_element_by_xpath('//input[@aria-label="Search query"]')
+searchInput.send_keys('#polynote')
+searchInput.send_keys(Keys.RETURN)
+
+# navigate to historical 'latest' tab
+#Top, Latest, People(!), Photos, Videos
+driver.find_element_by_link_text('Latest').click()
+
+data = []
+tweet_ids = set()
+lastPosition = driver.execute_script("return window.pageYOffset;")
+scrolling = True
+
+while scrolling:
+    pageCards = driver.find_elements_by_xpath('//div[@data-testid="tweet"]')
+    for card in pageCards[-15:]: #check only 15 latest tweets on page
+        tweet = getTweetData(card)
+        if tweet:
+            tweet_id = ''.join(tweet)
+            if tweet_id not in tweet_ids:
+                tweet_ids.add(tweet_id)
+                data.append(tweet)
+            
+    scrollAttempt = 0
+    while True:
+        # check scroll position
+        driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+        sleep(2)
+        currPosition = driver.execute_script("return window.pageYOffset;")
+        if lastPosition == currPosition:
+            scrollAttempt += 1
+            
+            # end of scrolling
+            if scrollAttempt >= 3:
+                scrolling = False
+                break
+            else:
+                sleep(2) # attempt another scroll
+        else:
+            lastPosition = currPosition
+            break
+
+
+print(len(data))
+for twt in data:
+    print(twt)
+
+    # close the web driver
+driver.close()
+
+
